@@ -337,7 +337,8 @@ class AutoShape(nn.Module):
             t.append(time_sync())
 
             # Post-process
-            y = non_max_suppression(y, self.conf, iou_thres=self.iou, classes=self.classes, max_det=self.max_det)  # NMS
+            y = non_max_suppression(y, len(self.names), self.conf, iou_thres=self.iou, classes=self.classes, max_det=self.max_det)  # NMS
+            print(y)
             for i in range(n):
                 scale_coords(shape1, y[i][:, :4], shape0[i])
 
@@ -349,6 +350,7 @@ class Detections:
     # YOLOv5 detections class for inference results
     def __init__(self, imgs, pred, files, times=None, names=None, shape=None):
         super().__init__()
+        print('here')
         d = pred[0].device  # device
         gn = [torch.tensor([*[im.shape[i] for i in [1, 0, 1, 0]], 1., 1.], device=d) for im in imgs]  # normalizations
         self.imgs = imgs  # list of images as numpy arrays
@@ -358,8 +360,8 @@ class Detections:
         self.files = files  # image filenames
         self.xyxy = pred  # xyxy pixels
         self.xywh = [xyxy2xywh(x) for x in pred]  # xywh pixels
-        self.xyxyn = [x / g for x, g in zip(self.xyxy, gn)]  # xyxy normalized
-        self.xywhn = [x / g for x, g in zip(self.xywh, gn)]  # xywh normalized
+        self.xyxyn = [x[:,:6] / g for x, g in zip(self.xyxy, gn)]  # xyxy normalized
+        self.xywhn = [x[:,:6] / g for x, g in zip(self.xywh, gn)]  # xywh normalized
         self.n = len(self.pred)  # number of images (batch size)
         self.t = tuple((times[i + 1] - times[i]) * 1000 / self.n for i in range(3))  # timestamps (ms)
         self.s = shape  # inference BCHW shape
@@ -368,13 +370,13 @@ class Detections:
         for i, (im, pred) in enumerate(zip(self.imgs, self.pred)):
             str = f'image {i + 1}/{len(self.pred)}: {im.shape[0]}x{im.shape[1]} '
             if pred.shape[0]:
-                for c in pred[:, -1].unique():
-                    n = (pred[:, -1] == c).sum()  # detections per class
+                for c in pred[:, 5].unique():
+                    n = (pred[:, 5] == c).sum()  # detections per class
                     str += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
                 if show or save or render or crop:
                     annotator = Annotator(im, pil=not self.ascii)
-                    for *box, conf, cls in reversed(pred):  # xyxy, confidence, class
-                        label = f'{self.names[int(cls)]} {conf:.2f}'
+                    for *box, conf, cls, other in reversed(pred):  # xyxy, confidence, class
+                        label = f'{self.names[int(cls)]} {conf:.2f} {other:.4f}'
                         if crop:
                             save_one_box(box, im, file=save_dir / 'crops' / self.names[int(cls)] / self.files[i])
                         else:  # all others
